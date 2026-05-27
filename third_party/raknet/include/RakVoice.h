@@ -145,7 +145,9 @@ namespace RakNet {
         /// \pre \a recipient must refer to a system with an open channel via RequestVoiceChannel
         /// \param[in] recipient The system to send voice data to
         /// \param[in] inputBuffer The voice data.  The size of inputBuffer should be what was specified as bufferSizeBytes in Init
-        bool SendFrame(RakNetGUID recipient, void* inputBuffer);
+        //bool SendFrame(RakNetGUID recipient, void* inputBuffer);
+        ///MODIFIED
+        bool SendFrame(RakNetGUID recipient, unsigned int onlineId, void* inputBuffer, int bufferLength);
 
         /// \brief Returns if we are currently sending voice data, accounting for voice activity detection
         /// \param[in] Which system to check
@@ -154,8 +156,28 @@ namespace RakNet {
 
         /// \brief Gets decoded voice data, from one or more remote senders
         /// \param[out] outputBuffer The voice data.  The size of outputBuffer should be what was specified as bufferSizeBytes in Init
-        void ReceiveFrame(void* outputBuffer);
+        //void ReceiveFrame(void* outputBuffer);
+        ///also freaky
+        bool ReceiveFrame(unsigned int speakerOnlineId, void* outputBuffer);
 
+        /// returns EVIL data from evil places
+        float GetMinDistance();
+
+        float GetMaxDistance();
+
+        bool GetIs3D();
+
+        bool GetServerVOIPEnable();
+
+        int GetSampleRate();
+
+        int GetSendFramePeriod();
+
+        int GetBuffering();
+
+        int GetBufferSizeBytes();
+
+        void SetVoiceBan(int playerId, bool isBan); //playerid cast from short to int on java side
         /// Returns the value sample rate, as passed to Init
         /// \return the sample rate
         int GetSampleRate(void) const;

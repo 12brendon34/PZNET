@@ -33,13 +33,13 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_RVInitServer(JNIEnv*, jc
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_RVDeinit(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    ZNetLogPrintf(0, "%s\n", __func__);
+    g_peer->DetachPlugin(&rakVoice);
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakVoice_GetComplexity(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    return rakVoice.GetEncoderComplexity();
 }
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetComplexity(JNIEnv*, jclass, jint complexity)
@@ -51,86 +51,102 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetComplexity(JNIEnv*, j
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_RequestVoiceChannel(JNIEnv*, jclass, jlong guid)
 {
     ZNetLogPrintf(0, "%s\n", __func__);
-    rakVoice.RequestVoiceChannel(static_cast<RakNet::RakNetGUID>(guid));
+    rakVoice.RequestVoiceChannel(RakNet::RakNetGUID(guid));
 }
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_CloseAllChannels(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    rakVoice.CloseAllChannels();
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakVoice_GetBufferSizeBytes(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    return rakVoice.GetBufferSizeBytes();
 }
 
 JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakVoice_GetServerVOIPEnable(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return false;
+    return rakVoice.GetServerVOIPEnable();
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakVoice_GetSampleRate(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    return rakVoice.GetSampleRate();
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakVoice_GetSendFramePeriod(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    return rakVoice.GetSendFramePeriod();
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakVoice_GetBuffering(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    return rakVoice.GetBuffering();
 }
 
 JNIEXPORT jfloat JNICALL Java_zombie_core_raknet_RakVoice_GetMinDistance(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0.0f;
+    return rakVoice.GetMinDistance();
 }
 
 JNIEXPORT jfloat JNICALL Java_zombie_core_raknet_RakVoice_GetMaxDistance(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0.0f;
+    return rakVoice.GetMaxDistance();
 }
 
 JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakVoice_GetIs3D(JNIEnv*, jclass)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return false;
+    return rakVoice.GetIs3D();
 }
 
-JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_CloseVoiceChannel(JNIEnv*, jclass, jlong)
+JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_CloseVoiceChannel(JNIEnv*, jclass, jlong channel)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    ZNetLogPrintf(0, "%s\n", __func__);
+    rakVoice.CloseVoiceChannel(RakNet::RakNetGUID(channel));
 }
 
-JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakVoice_ReceiveFrame(JNIEnv*, jclass, jlong, jbyteArray)
+JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakVoice_ReceiveFrame(JNIEnv* env, jclass, jlong onlineId, jbyteArray out)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return false;
+    if (global_frames_per_buffer > 20000) {
+        jclass cls = env->FindClass("java/lang/RuntimeException");
+        env->ThrowNew(cls, "invalid buffer size");
+        return JNI_FALSE;
+    }
+
+    jbyte buf[20000];
+    const bool ok = rakVoice.ReceiveFrame(static_cast<unsigned int>(onlineId), buf);
+
+    env->SetByteArrayRegion(out, 0, static_cast<jsize>(global_frames_per_buffer), buf);
+
+    if (ok) {
+        return JNI_TRUE;
+    }
+    return JNI_FALSE;
 }
 
-JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SendFrame(JNIEnv*, jclass, jlong, jlong, jbyteArray, jlong)
+JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SendFrame(JNIEnv* env, jclass, jlong guid, jlong onlineId, jbyteArray data, jlong length)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    if (length > 20000) {
+        jclass cls = env->FindClass("java/lang/RuntimeException");
+        env->ThrowNew(cls, "invalid buffer size");
+        return;
+    }
+
+    jbyte buf[20000];
+    env->GetByteArrayRegion(data, 0, static_cast<jsize>(length), buf);
+
+    rakVoice.SendFrame(RakNet::RakNetGUID(static_cast<uint64_t>(guid)), static_cast<unsigned int>(onlineId), buf, static_cast<int>(length));
 }
 
-JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetLoopbackMode(JNIEnv*, jclass, jboolean)
+//don't think this is ever used
+JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetLoopbackMode(JNIEnv*, jclass, jboolean enabled)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    rakVoice.SetLoopbackMode(enabled);
 }
 
-JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetVoiceBan(JNIEnv*, jclass, jlong, jboolean)
+JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetVoiceBan(JNIEnv*, jclass, jlong playerId, jboolean isBan)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    rakVoice.SetVoiceBan(static_cast<int>(playerId), isBan);
 }
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetChannelsRouting(JNIEnv* env, jclass, jlong guid, jboolean broadcast, jintArray channels, jshort length)

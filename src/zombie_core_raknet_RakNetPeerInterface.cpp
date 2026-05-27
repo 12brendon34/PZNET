@@ -6,7 +6,7 @@
 
 #include <MessageIdentifiers.h>
 #include <RakPeerInterface.h>
-#include <cstring>
+#include <cstdio>
 
 #include "RakNetStatistics.h"
 #include "jnicommon.h"
@@ -51,10 +51,10 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Startup(JNIEn
 
     if (isServer) {
         ZNetLogPrintf(1, "Startup: serverPort=%d serverUDPPort=%d\n", serverPort, serverUDPPort);
-        socketDescriptors.port = static_cast<unsigned short>(serverPort);
+        socketDescriptors.port = serverPort;
         socketDescriptors.socketFamily = AF_INET;
     } else {
-        socketDescriptors.port = static_cast<unsigned short>(clientPort);
+        socketDescriptors.port = clientPort;
         socketDescriptors.socketFamily = AF_INET;
     }
 
@@ -74,9 +74,20 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Shutdown(JNIE
     g_peer->Shutdown(250, 0, LOW_PRIORITY);
 }
 
-JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetServerIP(JNIEnv*, jobject, jstring)
+JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetServerIP(JNIEnv* env, jobject, jstring ip)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    ZNetLogPrintf(0, "%s\n", __func__);
+
+    const char* ipStr = env->GetStringUTFChars(ip, nullptr);
+    ZNetLogPrintf(1, "SetServerIP: '%s'\n", ipStr);
+
+    int a, b, c, d;
+    if (std::sscanf(ipStr, "%d.%d.%d.%d", &a, &b, &c, &d) == 4) {
+        std::strncpy(socketDescriptors.hostAddress, ipStr, sizeof(socketDescriptors.hostAddress));
+        socketDescriptors.hostAddress[sizeof(socketDescriptors.hostAddress) - 1] = '\0';
+    }
+
+    env->ReleaseStringUTFChars(ip, ipStr);
 }
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetServerPort(JNIEnv*, jobject, jint port, jint udpPort)
@@ -85,7 +96,7 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetServerPort
     ZNetLogPrintf(1, "SetServerPort: port=%d UDPPort=%d\n", port, udpPort);
     serverPort = port;
     serverUDPPort = udpPort;
-    socketDescriptors.port = static_cast<unsigned short>(port);
+    socketDescriptors.port = port;
 }
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetClientPort(JNIEnv*, jobject, jint value)
@@ -122,10 +133,14 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Connect(JNIEn
     return result;
 }
 
-JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_ConnectToSteamServer(JNIEnv*, jobject, jlong, jstring, jboolean)
+JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_ConnectToSteamServer(JNIEnv* env, jobject, jlong, jstring, jboolean)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    ZNetLogPrintf(0, "%s\n", __func__);
+    jclass cls = env->FindClass("java/lang/RuntimeException");
+    if (cls) {
+        env->ThrowNew(cls, "this is the non-Steam version");
+    }
+    return 1;
 }
 
 JNIEXPORT jstring JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetServerIP(JNIEnv* env, jobject)
@@ -138,16 +153,24 @@ JNIEXPORT jstring JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetServerI
     return nullptr;
 }
 
-JNIEXPORT jlong JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetClientSteamID(JNIEnv*, jobject, jlong)
+JNIEXPORT jlong JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetClientSteamID(JNIEnv* env, jobject, jlong)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    ZNetLogPrintf(0, "%s\n", __func__);
+    jclass cls = env->FindClass("java/lang/RuntimeException");
+    if (cls) {
+        env->ThrowNew(cls, "this is the non-Steam version");
+    }
+    return -1;
 }
 
-JNIEXPORT jlong JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetClientOwnerSteamID(JNIEnv*, jobject, jlong)
+JNIEXPORT jlong JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetClientOwnerSteamID(JNIEnv* env, jobject, jlong)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    ZNetLogPrintf(0, "%s\n", __func__);
+    jclass cls = env->FindClass("java/lang/RuntimeException");
+    if (cls) {
+        env->ThrowNew(cls, "this is the non-Steam version");
+    }
+    return -1;
 }
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetIncomingPassword(JNIEnv* env, jobject, jstring password)
@@ -167,8 +190,7 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetTimeoutTim
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetMaximumIncomingConnections(JNIEnv*, jobject, jint maxConnections)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    // SetMaximumIncomingConnections
+    ZNetLogPrintf(0, "%s\n", __func__);
     g_peer->SetMaximumIncomingConnections(maxConnections);
 }
 
@@ -178,9 +200,10 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetOccasional
     g_peer->SetOccasionalPing(value);
 }
 
-JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetUnreliableTimeout(JNIEnv*, jobject, jint)
+JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetUnreliableTimeout(JNIEnv*, jobject, jint timeoutMS)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    ZNetLogPrintf(0, "%s\n", __func__);
+    g_peer->SetUnreliableTimeout(static_cast<RakNet::TimeMS>(timeoutMS));
 }
 
 JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakNetPeerInterface_TryReceive(JNIEnv*, jobject)
@@ -222,13 +245,16 @@ JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakNetPeerInterface_TryReceiv
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_nativeGetData(JNIEnv* env, jobject, jobject buffer)
 {
     void* dst = env->GetDirectBufferAddress(buffer);
+    if (!dst)
+        return 0;
+
     std::memcpy(dst, g_lastPacket.data, g_lastPacket.length);
 
     if (!g_bufferLimitMethod) {
-        jclass cls = env->GetObjectClass(buffer);
+        jclass cls = env->FindClass("java/nio/Buffer");
         g_bufferLimitMethod = env->GetMethodID(cls, "limit", "(I)Ljava/nio/Buffer;");
     }
-    env->CallObjectMethod(buffer, g_bufferLimitMethod, static_cast<jint>(g_lastPacket.length));
+    env->CallObjectMethod(buffer, g_bufferLimitMethod, g_lastPacket.length);
 
     return static_cast<jint>(g_lastPacket.length);
 }
@@ -259,7 +285,7 @@ JNIEXPORT jlong JNICALL Java_zombie_core_raknet_RakNetPeerInterface_getGuidOfPac
 
 JNIEXPORT jstring JNICALL Java_zombie_core_raknet_RakNetPeerInterface_getIPFromGUID(JNIEnv* env, jobject, jlong guid)
 {
-    const RakNet::SystemAddress addr = g_peer->GetSystemAddressFromGuid(RakNet::RakNetGUID(static_cast<uint64_t>(guid)));
+    const RakNet::SystemAddress addr = g_peer->GetSystemAddressFromGuid(RakNet::RakNetGUID(guid));
 
     const char* ipStr = addr.ToString(true, '|');
     return env->NewStringUTF(ipStr);
@@ -269,7 +295,7 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_disconnect(JN
 {
     ZNetLogPrintf(0, "%s\n", __func__);
     RakNet::AddressOrGUID aog;
-    aog.rakNetGuid = RakNet::RakNetGUID(static_cast<uint64_t>(guid));
+    aog.rakNetGuid = RakNet::RakNetGUID(guid);
     aog.systemAddress = RakNet::UNASSIGNED_SYSTEM_ADDRESS;
     g_peer->CloseConnection(aog, true, 0, LOW_PRIORITY);
 }
@@ -285,9 +311,9 @@ JNIEXPORT jobject JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetNetStat
     if (!obj)
         return nullptr;
 
-    const RakNet::SystemAddress addr = g_peer->GetSystemAddressFromGuid(RakNet::RakNetGUID(static_cast<uint64_t>(guid)));
+    const RakNet::SystemAddress addr = g_peer->GetSystemAddressFromGuid(RakNet::RakNetGUID(guid));
 
-    RakNet::RakNetStatistics* s = g_peer->GetStatistics(addr);
+    const RakNet::RakNetStatistics* s = g_peer->GetStatistics(addr);
     if (!s)
         return obj;
 
@@ -332,10 +358,18 @@ JNIEXPORT jobject JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetNetStat
     return obj;
 }
 
+JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetLastPing(JNIEnv*, jobject, jlong guid)
+{
+    RakNet::AddressOrGUID aog;
+    aog.rakNetGuid = RakNet::RakNetGUID(guid);
+    aog.systemAddress = RakNet::UNASSIGNED_SYSTEM_ADDRESS;
+    return g_peer->GetLastPing(aog);
+}
+
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetAveragePing(JNIEnv*, jobject, jlong guid)
 {
     RakNet::AddressOrGUID aog;
-    aog.rakNetGuid = RakNet::RakNetGUID(static_cast<uint64_t>(guid));
+    aog.rakNetGuid = RakNet::RakNetGUID(guid);
     aog.systemAddress = RakNet::UNASSIGNED_SYSTEM_ADDRESS;
     return g_peer->GetAveragePing(aog);
 }
@@ -343,7 +377,7 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetAveragePin
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetLowestPing(JNIEnv*, jobject, jlong guid)
 {
     RakNet::AddressOrGUID aog;
-    aog.rakNetGuid = RakNet::RakNetGUID(static_cast<uint64_t>(guid));
+    aog.rakNetGuid = RakNet::RakNetGUID(guid);
     aog.systemAddress = RakNet::UNASSIGNED_SYSTEM_ADDRESS;
     return g_peer->GetLowestPing(aog);
 }
@@ -351,7 +385,7 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetLowestPing
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetMTUSize(JNIEnv*, jobject, jlong guid)
 {
     const RakNet::SystemAddress addr = g_peer->GetSystemAddressFromGuid(
-        RakNet::RakNetGUID(static_cast<uint64_t>(guid)));
+        RakNet::RakNetGUID(guid));
     return g_peer->GetMTUSize(addr);
 }
 
@@ -362,7 +396,7 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetConnection
 
 JNIEXPORT jbyte JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetConnectionType(JNIEnv*, jobject, jlong)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    //ZNetLogPrintf(0, "%s called\n", __func__);
     return 1;
 }
 } // extern "C"
