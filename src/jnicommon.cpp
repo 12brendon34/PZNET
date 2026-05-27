@@ -44,12 +44,12 @@ char* GetStandardUTFChars(JNIEnv* env, jstring jstr)
     if (!String)
         InitJNIStuff(env);
 
-    auto bytes = (jbyteArray)env->CallObjectMethod(jstr, String_getBytes, UTF8);
+    const auto bytes = (jbyteArray)env->CallObjectMethod(jstr, String_getBytes, UTF8);
 
     if (!env->ExceptionCheck()) {
-        jsize len = env->GetArrayLength(bytes);
+        const jsize len = env->GetArrayLength(bytes);
         jbyte* src = env->GetByteArrayElements(bytes, nullptr);
-        char* dst = new char[len + 1];
+        const auto dst = new char[len + 1];
         std::memcpy(dst, src, len);
         dst[len] = '\0';
         env->ReleaseByteArrayElements(bytes, src, JNI_ABORT);
@@ -60,7 +60,7 @@ char* GetStandardUTFChars(JNIEnv* env, jstring jstr)
     env->ExceptionDescribe();
     env->ExceptionClear();
 
-    char* dst = new char[18];
+    const auto dst = new char[18];
     std::memcpy(dst, "ExceptionOccurred", 18);
     return dst;
 }
@@ -77,7 +77,7 @@ jstring GetModifiedUTFString(JNIEnv* env, const char* s)
 
     const size_t len = std::strlen(s);
     jbyteArray bytes = env->NewByteArray(static_cast<jsize>(len));
-    env->SetByteArrayRegion(bytes, 0, (jsize)len, (const jbyte*)s);
+    env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(len), reinterpret_cast<const jbyte*>(s));
 
     auto result = (jstring)env->NewObject(String, String_init, bytes, UTF8);
     env->DeleteLocalRef(bytes);
