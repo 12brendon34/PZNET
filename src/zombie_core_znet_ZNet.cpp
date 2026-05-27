@@ -39,6 +39,9 @@ JNIEXPORT void JNICALL Java_zombie_core_znet_ZNet_init(JNIEnv* env, jclass clazz
     g_LogPutsMethod = env->GetStaticMethodID(clazz, "logPutsCallback", "(Ljava/lang/String;)V");
     ZNetLogSetPutsFunction(JNI_LogPuts);
     ZNetLogPrintf(2, "ZNet loaded\n");
+#ifdef _DEBUG
+    ZNetLogSetLevel(-1); //added by me
+#endif
 }
 
 JNIEXPORT void JNICALL Java_zombie_core_znet_ZNet_setLogLevel(JNIEnv*, jclass, jint level)

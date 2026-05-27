@@ -25,10 +25,9 @@ void ZNetLogSetLevel(int level)
 
 void ZNetLogPrintfVA(int level, const char* fmt, va_list va)
 {
-#ifndef _DEBUG
     if (g_logLevel > level)
         return;
-#endif
+
     if (!ZNetLogPuts)
         return;
 
@@ -39,16 +38,20 @@ void ZNetLogPrintfVA(int level, const char* fmt, va_list va)
 
 void ZNetLogPrintf(int level, const char* fmt, ...)
 {
+#ifdef _DEBUG
     va_list va;
     va_start(va, fmt);
     ZNetLogPrintfVA(level, fmt, va);
     va_end(va);
+#endif
 }
 
 void ZNetLogPrintf(const char* fmt, ...)
 {
+#ifdef _DEBUG
     va_list va;
     va_start(va, fmt);
     ZNetLogPrintfVA(2, fmt, va);
     va_end(va);
+#endif
 }

@@ -101,7 +101,7 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Connect(JNIEn
     ZNetLogPrintf(2, "Connecting to %s:%d\n", hostStr, port);
     jint result = RakNet::INVALID_PARAMETER;
     if (!g_steamMode) {
-        result = static_cast<jint>(g_peer->Connect( hostStr,  static_cast<unsigned short>(port),   pwStr, static_cast<int>(std::strlen(pwStr)),    nullptr,   0,   12,   500,  0  ));
+        result = static_cast<jint>(g_peer->Connect(hostStr, static_cast<unsigned short>(port), pwStr, static_cast<int>(std::strlen(pwStr)), nullptr, 0, 12, 500, 0));
         ZNetLogPrintf(1, "Connect returned %d\n", result);
     }
 
@@ -215,7 +215,7 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_nativeGetData
 
     jclass cls = env->GetObjectClass(buffer);
 
-    jmethodID limit = env->GetMethodID(   cls,  "limit", "(I)Ljava/nio/Buffer;"    );
+    jmethodID limit = env->GetMethodID(cls, "limit", "(I)Ljava/nio/Buffer;");
 
     env->CallObjectMethod(buffer, limit, static_cast<jint>(g_lastPacket.length));
 
@@ -226,7 +226,8 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_sendNative(JN
 {
     char* data = static_cast<char*>(env->GetDirectBufferAddress(buffer));
 
-    if (guid == -1) { //UNASSIGNED_RAKNET_GUID
+    if (guid == -1) {
+        //UNASSIGNED_RAKNET_GUID
         return g_peer->Send(data, length, static_cast<PacketPriority>(priority), static_cast<PacketReliability>(reliability), orderingChannel, RakNet::UNASSIGNED_SYSTEM_ADDRESS, broadcast != JNI_FALSE);
     } else {
         RakNet::SystemAddress addr = g_peer->GetSystemAddressFromGuid(RakNet::RakNetGUID(static_cast<RakNet::RakNetGUID>(guid)));
