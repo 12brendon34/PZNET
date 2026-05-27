@@ -9,8 +9,12 @@
 #include <cstring>
 
 #include "RakNetStatistics.h"
+#include "jnicommon.h"
 
 RakNet::RakPeerInterface* g_peer = RakNet::RakPeerInterface::GetInstance();
+static jmethodID g_bufferLimitMethod = nullptr;
+
+static RakNet::Packet* g_currentPacket = nullptr;
 static RakNet::Packet g_lastPacket;
 
 static bool g_steamMode = false;
@@ -35,7 +39,7 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Init(JNIEnv* 
     }
 
     g_steamMode = false;
-    g_lastPacket = RakNet::Packet{};
+    //g_lastPacket = RakNet::Packet{};
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Startup(JNIEnv* env, jobject, jint maxConnections, jstring version, jboolean isServer)
@@ -63,6 +67,10 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Startup(JNIEn
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Shutdown(JNIEnv*, jobject)
 {
     ZNetLogPrintf(0, "%s\n", __func__);
+    if (g_currentPacket) {
+        g_peer->DeallocatePacket(g_currentPacket);
+        g_currentPacket = nullptr;
+    }
     g_peer->Shutdown(250, 0, LOW_PRIORITY);
 }
 
@@ -93,17 +101,17 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Connect(JNIEn
     ZNetLogPrintf(0, "%s\n", __func__);
 
     const char* hostStr = env->GetStringUTFChars(host, nullptr);
+    if (!hostStr)
+        return RakNet::INVALID_PARAMETER;
     const char* pwStr = env->GetStringUTFChars(password, nullptr);
-    if (!hostStr || !pwStr) {
-        if (hostStr)
-            env->ReleaseStringUTFChars(host, hostStr);
-        if (pwStr)
-            env->ReleaseStringUTFChars(password, pwStr);
+    if (!pwStr) {
+        env->ReleaseStringUTFChars(host, hostStr);
         return RakNet::INVALID_PARAMETER;
     }
 
     ZNetLogPrintf(2, "Connecting to %s:%d\n", hostStr, port);
     jint result = RakNet::INVALID_PARAMETER;
+    //basically just dead code, but I'll keep
     if (!g_steamMode) {
         result = static_cast<jint>(g_peer->Connect(hostStr, static_cast<unsigned short>(port), pwStr, static_cast<int>(std::strlen(pwStr)), nullptr, 0, 12, 500, 0));
         ZNetLogPrintf(1, "Connect returned %d\n", result);
@@ -120,9 +128,13 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_ConnectToStea
     return 0;
 }
 
-JNIEXPORT jstring JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetServerIP(JNIEnv*, jobject)
+JNIEXPORT jstring JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetServerIP(JNIEnv* env, jobject)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    ZNetLogPrintf(0, "%s\n", __func__);
+    jclass cls = env->FindClass("java/lang/RuntimeException");
+    if (cls) {
+        env->ThrowNew(cls, "this is the non-Steam version");
+    }
     return nullptr;
 }
 
@@ -147,9 +159,10 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetIncomingPa
     env->ReleaseStringUTFChars(password, pw);
 }
 
-JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetTimeoutTime(JNIEnv*, jobject, jint)
+JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetTimeoutTime(JNIEnv*, jobject, jint timeMS)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    ZNetLogPrintf(0, "%s\n", __func__);
+    g_peer->SetTimeoutTime(static_cast<RakNet::TimeMS>(timeMS), RakNet::UNASSIGNED_SYSTEM_ADDRESS);
 }
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetMaximumIncomingConnections(JNIEnv*, jobject, jint maxConnections)
@@ -172,43 +185,35 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetUnreliable
 
 JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakNetPeerInterface_TryReceive(JNIEnv*, jobject)
 {
+    if (g_currentPacket) {
+        g_peer->DeallocatePacket(g_currentPacket);
+        g_currentPacket = nullptr;
+    }
+
     RakNet::Packet* packet = g_peer->Receive();
     if (!packet)
         return JNI_FALSE;
 
-    if (g_lastPacket.data)
-        free(g_lastPacket.data);
+    g_currentPacket = packet;
 
     g_lastPacket.systemAddress = packet->systemAddress;
     g_lastPacket.guid = packet->guid;
     g_lastPacket.length = packet->length;
     g_lastPacket.bitSize = packet->bitSize;
-
-    const uint32_t len = packet->length;
-    g_lastPacket.data = static_cast<unsigned char*>(std::malloc(len + 10));
-    std::memcpy(g_lastPacket.data, packet->data, len);
-    std::memset(g_lastPacket.data + len, 0, 10);
-
-    g_peer->DeallocatePacket(packet);
+    g_lastPacket.data = packet->data;
 
     const auto idx = static_cast<uint8_t>(g_peer->GetIndexFromSystemAddress(g_lastPacket.systemAddress));
-    auto* data = g_lastPacket.data;
 
-    if (data[0] == ID_NEW_INCOMING_CONNECTION) {
-        data[1] = idx;
-        ++g_lastPacket.length;
-    }
-    if (data[0] == ID_CONNECTION_REQUEST_ACCEPTED) {
-        data[1] = idx;
-        ++g_lastPacket.length;
-    }
-    if (data[0] == ID_CONNECTION_LOST) {
-        data[1] = idx;
-        ++g_lastPacket.length;
-    }
-    if (data[0] == ID_DISCONNECTION_NOTIFICATION) {
-        data[1] = idx;
-        ++g_lastPacket.length;
+    switch (g_lastPacket.data[0]) {
+        case ID_NEW_INCOMING_CONNECTION:
+        case ID_CONNECTION_REQUEST_ACCEPTED:
+        case ID_CONNECTION_LOST:
+        case ID_DISCONNECTION_NOTIFICATION:
+            g_lastPacket.data[1] = idx;
+            ++g_lastPacket.length;
+            break;
+        default:
+            break;
     }
 
     return JNI_TRUE;
@@ -216,16 +221,14 @@ JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakNetPeerInterface_TryReceiv
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_nativeGetData(JNIEnv* env, jobject, jobject buffer)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-
     void* dst = env->GetDirectBufferAddress(buffer);
-    memcpy(dst, g_lastPacket.data, g_lastPacket.length);
+    std::memcpy(dst, g_lastPacket.data, g_lastPacket.length);
 
-    jclass cls = env->GetObjectClass(buffer);
-
-    jmethodID limit = env->GetMethodID(cls, "limit", "(I)Ljava/nio/Buffer;");
-
-    env->CallObjectMethod(buffer, limit, static_cast<jint>(g_lastPacket.length));
+    if (!g_bufferLimitMethod) {
+        jclass cls = env->GetObjectClass(buffer);
+        g_bufferLimitMethod = env->GetMethodID(cls, "limit", "(I)Ljava/nio/Buffer;");
+    }
+    env->CallObjectMethod(buffer, g_bufferLimitMethod, static_cast<jint>(g_lastPacket.length));
 
     return static_cast<jint>(g_lastPacket.length);
 }
@@ -239,14 +242,14 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_sendNative(JN
         return static_cast<jint>(g_peer->Send(data, length, static_cast<PacketPriority>(priority), static_cast<PacketReliability>(reliability), orderingChannel, RakNet::UNASSIGNED_SYSTEM_ADDRESS, broadcast != JNI_FALSE));
     }
 
-    const RakNet::SystemAddress addr = g_peer->GetSystemAddressFromGuid(RakNet::RakNetGUID(static_cast<RakNet::RakNetGUID>(guid)));
+    const RakNet::SystemAddress addr = g_peer->GetSystemAddressFromGuid(RakNet::RakNetGUID(guid));
     return static_cast<jint>(g_peer->Send(data, length, static_cast<PacketPriority>(priority), static_cast<PacketReliability>(reliability), orderingChannel, addr, false));
 }
 
-JNIEXPORT jlong JNICALL Java_zombie_core_raknet_RakNetPeerInterface_getGuidFromIndex(JNIEnv*, jobject, jint)
+JNIEXPORT jlong JNICALL Java_zombie_core_raknet_RakNetPeerInterface_getGuidFromIndex(JNIEnv*, jobject, jint index)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    const RakNet::RakNetGUID guid = g_peer->GetGUIDFromIndex(static_cast<unsigned int>(index));
+    return static_cast<jlong>(guid.g);
 }
 
 JNIEXPORT jlong JNICALL Java_zombie_core_raknet_RakNetPeerInterface_getGuidOfPacket(JNIEnv*, jobject)
@@ -262,9 +265,13 @@ JNIEXPORT jstring JNICALL Java_zombie_core_raknet_RakNetPeerInterface_getIPFromG
     return env->NewStringUTF(ipStr);
 }
 
-JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_disconnect(JNIEnv*, jobject, jlong, jstring)
+JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_disconnect(JNIEnv*, jobject, jlong guid, jstring /*reason*/)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    ZNetLogPrintf(0, "%s\n", __func__);
+    RakNet::AddressOrGUID aog;
+    aog.rakNetGuid = RakNet::RakNetGUID(static_cast<uint64_t>(guid));
+    aog.systemAddress = RakNet::UNASSIGNED_SYSTEM_ADDRESS;
+    g_peer->CloseConnection(aog, true, 0, LOW_PRIORITY);
 }
 
 JNIEXPORT jobject JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetNetStatistics(JNIEnv* env, jobject, jlong guid)
@@ -283,71 +290,74 @@ JNIEXPORT jobject JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetNetStat
     RakNet::RakNetStatistics* s = g_peer->GetStatistics(addr);
     if (!s)
         return obj;
-    /*
-    trySetLongField(a1, v10, "lastUserMessageBytesPushed", *(_QWORD *)v14);
-    trySetLongField(a1, v10, "lastUserMessageBytesSent", *((_QWORD *)v15 + 1));
-    trySetLongField(a1, v10, "lastUserMessageBytesResent", *((_QWORD *)v15 + 2));
-    trySetLongField(a1, v10, "lastUserMessageBytesReceivedProcessed", *((_QWORD *)v15 + 3));
-    trySetLongField(a1, v10, "lastUserMessageBytesReceivedIgnored", *((_QWORD *)v15 + 4));
-    trySetLongField(a1, v10, "lastActualBytesSent", *((_QWORD *)v15 + 5));
-    trySetLongField(a1, v10, "lastActualBytesReceived", *((_QWORD *)v15 + 6));
-    trySetLongField(a1, v10, "totalUserMessageBytesPushed", *((_QWORD *)v15 + 7));
-    trySetLongField(a1, v10, "totalUserMessageBytesSent", *((_QWORD *)v15 + 8));
-    trySetLongField(a1, v10, "totalUserMessageBytesResent", *((_QWORD *)v15 + 9));
-    trySetLongField(a1, v10, "totalUserMessageBytesReceivedProcessed", *((_QWORD *)v15 + 10));
-    trySetLongField(a1, v10, "totalUserMessageBytesReceivedIgnored", *((_QWORD *)v15 + 11));
-    trySetLongField(a1, v10, "totalActualBytesSent", *((_QWORD *)v15 + 12));
-    trySetLongField(a1, v10, "totalActualBytesReceived", *((_QWORD *)v15 + 13));
-    trySetLongField(a1, v10, "connectionStartTime", *((_QWORD *)v15 + 14));
-    trySetBooleanField(a1, v10, "isLimitedByCongestionControl", *((unsigned __int8 *)v15 + 120));
-    trySetLongField(a1, v10, "bpsLimitByCongestionControl", *((_QWORD *)v15 + 16));
-    trySetBooleanField(a1, v10, "isLimitedByOutgoingBandwidthLimit", *((unsigned __int8 *)v15 + 136));
-    trySetLongField(a1, v10, "bpsLimitByOutgoingBandwidthLimit", *((_QWORD *)v15 + 18));
-    trySetLongField(a1, v10, "messageInSendBufferImmediate", *((unsigned int *)v15 + 38));
-    trySetLongField(a1, v10, "messageInSendBufferHigh", *((unsigned int *)v15 + 39));
-    trySetLongField(a1, v10, "messageInSendBufferMedium", *((unsigned int *)v15 + 40));
-    trySetLongField(a1, v10, "messageInSendBufferLow", *((unsigned int *)v15 + 41));
-    trySetDoubleField(a1, v10, "bytesInSendBufferImmediate", v15[21]);
-    trySetDoubleField(a1, v10, "bytesInSendBufferHigh", v15[22]);
-    trySetDoubleField(a1, v10, "bytesInSendBufferMedium", v15[23]);
-    trySetDoubleField(a1, v10, "bytesInSendBufferLow", v15[24]);
-    trySetLongField(a1, v10, "messagesInResendBuffer", *((unsigned int *)v15 + 50));
-    trySetLongField(a1, v10, "bytesInResendBuffer", *((_QWORD *)v15 + 26));
-    trySetDoubleField(a1, v10, "packetlossLastSecond", *((float *)v15 + 54));
-    trySetDoubleField(a1, v10, "packetlossTotal", *((float *)v15 + 55));
-    */
+
+    trySetLongField(env, obj, "lastUserMessageBytesPushed", static_cast<jlong>(s->valueOverLastSecond[RakNet::USER_MESSAGE_BYTES_PUSHED]));
+    trySetLongField(env, obj, "lastUserMessageBytesSent", static_cast<jlong>(s->valueOverLastSecond[RakNet::USER_MESSAGE_BYTES_SENT]));
+    trySetLongField(env, obj, "lastUserMessageBytesResent", static_cast<jlong>(s->valueOverLastSecond[RakNet::USER_MESSAGE_BYTES_RESENT]));
+    trySetLongField(env, obj, "lastUserMessageBytesReceivedProcessed", static_cast<jlong>(s->valueOverLastSecond[RakNet::USER_MESSAGE_BYTES_RECEIVED_PROCESSED]));
+    trySetLongField(env, obj, "lastUserMessageBytesReceivedIgnored", static_cast<jlong>(s->valueOverLastSecond[RakNet::USER_MESSAGE_BYTES_RECEIVED_IGNORED]));
+    trySetLongField(env, obj, "lastActualBytesSent", static_cast<jlong>(s->valueOverLastSecond[RakNet::ACTUAL_BYTES_SENT]));
+    trySetLongField(env, obj, "lastActualBytesReceived", static_cast<jlong>(s->valueOverLastSecond[RakNet::ACTUAL_BYTES_RECEIVED]));
+
+    trySetLongField(env, obj, "totalUserMessageBytesPushed", static_cast<jlong>(s->runningTotal[RakNet::USER_MESSAGE_BYTES_PUSHED]));
+    trySetLongField(env, obj, "totalUserMessageBytesSent", static_cast<jlong>(s->runningTotal[RakNet::USER_MESSAGE_BYTES_SENT]));
+    trySetLongField(env, obj, "totalUserMessageBytesResent", static_cast<jlong>(s->runningTotal[RakNet::USER_MESSAGE_BYTES_RESENT]));
+    trySetLongField(env, obj, "totalUserMessageBytesReceivedProcessed", static_cast<jlong>(s->runningTotal[RakNet::USER_MESSAGE_BYTES_RECEIVED_PROCESSED]));
+    trySetLongField(env, obj, "totalUserMessageBytesReceivedIgnored", static_cast<jlong>(s->runningTotal[RakNet::USER_MESSAGE_BYTES_RECEIVED_IGNORED]));
+    trySetLongField(env, obj, "totalActualBytesSent", static_cast<jlong>(s->runningTotal[RakNet::ACTUAL_BYTES_SENT]));
+    trySetLongField(env, obj, "totalActualBytesReceived", static_cast<jlong>(s->runningTotal[RakNet::ACTUAL_BYTES_RECEIVED]));
+
+    trySetLongField(env, obj, "connectionStartTime", static_cast<jlong>(s->connectionStartTime));
+
+    trySetBooleanField(env, obj, "isLimitedByCongestionControl", s->isLimitedByCongestionControl);
+    trySetLongField(env, obj, "bpsLimitByCongestionControl", static_cast<jlong>(s->BPSLimitByCongestionControl));
+    trySetBooleanField(env, obj, "isLimitedByOutgoingBandwidthLimit", s->isLimitedByOutgoingBandwidthLimit);
+    trySetLongField(env, obj, "bpsLimitByOutgoingBandwidthLimit", static_cast<jlong>(s->BPSLimitByOutgoingBandwidthLimit));
+
+    trySetLongField(env, obj, "messageInSendBufferImmediate", s->messageInSendBuffer[IMMEDIATE_PRIORITY]);
+    trySetLongField(env, obj, "messageInSendBufferHigh", s->messageInSendBuffer[HIGH_PRIORITY]);
+    trySetLongField(env, obj, "messageInSendBufferMedium", s->messageInSendBuffer[MEDIUM_PRIORITY]);
+    trySetLongField(env, obj, "messageInSendBufferLow", s->messageInSendBuffer[LOW_PRIORITY]);
+
+    trySetDoubleField(env, obj, "bytesInSendBufferImmediate", s->bytesInSendBuffer[IMMEDIATE_PRIORITY]);
+    trySetDoubleField(env, obj, "bytesInSendBufferHigh", s->bytesInSendBuffer[HIGH_PRIORITY]);
+    trySetDoubleField(env, obj, "bytesInSendBufferMedium", s->bytesInSendBuffer[MEDIUM_PRIORITY]);
+    trySetDoubleField(env, obj, "bytesInSendBufferLow", s->bytesInSendBuffer[LOW_PRIORITY]);
+
+    trySetLongField(env, obj, "messagesInResendBuffer", s->messagesInResendBuffer);
+    trySetLongField(env, obj, "bytesInResendBuffer", static_cast<jlong>(s->bytesInResendBuffer));
+    trySetDoubleField(env, obj, "packetlossLastSecond", s->packetlossLastSecond);
+    trySetDoubleField(env, obj, "packetlossTotal", s->packetlossTotal);
 
     return obj;
 }
 
-JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetAveragePing(JNIEnv*, jobject, jlong)
+JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetAveragePing(JNIEnv*, jobject, jlong guid)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    RakNet::AddressOrGUID aog;
+    aog.rakNetGuid = RakNet::RakNetGUID(static_cast<uint64_t>(guid));
+    aog.systemAddress = RakNet::UNASSIGNED_SYSTEM_ADDRESS;
+    return g_peer->GetAveragePing(aog);
 }
 
-JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetLastPing(JNIEnv*, jobject, jlong)
+JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetLowestPing(JNIEnv*, jobject, jlong guid)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    RakNet::AddressOrGUID aog;
+    aog.rakNetGuid = RakNet::RakNetGUID(static_cast<uint64_t>(guid));
+    aog.systemAddress = RakNet::UNASSIGNED_SYSTEM_ADDRESS;
+    return g_peer->GetLowestPing(aog);
 }
 
-JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetLowestPing(JNIEnv*, jobject, jlong)
+JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetMTUSize(JNIEnv*, jobject, jlong guid)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
-}
-
-JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetMTUSize(JNIEnv*, jobject, jlong)
-{
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    const RakNet::SystemAddress addr = g_peer->GetSystemAddressFromGuid(
+        RakNet::RakNetGUID(static_cast<uint64_t>(guid)));
+    return g_peer->GetMTUSize(addr);
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetConnectionsNumber(JNIEnv*, jobject)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return 0;
+    return g_peer->NumberOfConnections();
 }
 
 JNIEXPORT jbyte JNICALL Java_zombie_core_raknet_RakNetPeerInterface_GetConnectionType(JNIEnv*, jobject, jlong)

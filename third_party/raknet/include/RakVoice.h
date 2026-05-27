@@ -77,6 +77,10 @@ namespace RakNet {
         /// evil freaky ahh Project Zomboid developer custom modification type shit ong fr fr zamnn buzzword
         void InitServer(bool enable, unsigned short sampleRate, int period, int complexity, int buffering, float minDistance, float maxDistance, bool is3D);
 
+        void SetChannelsRouting(RakNetGUID recipient, bool broadcast, int* routingData, short dataIntCount);
+
+        bool GetChannelStatistics(RakNet::RakNetGUID recipient, int64_t* out);
+
         /// \brief Changes encoder complexity
         /// Specifying higher values might help when encoding non-speech sounds.
         /// \param[in] complexity 0 to 10. The higher the value, the more CPU it needs. Recommended values are from 2 to 4.

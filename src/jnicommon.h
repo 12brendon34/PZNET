@@ -15,3 +15,9 @@ char* GetStandardUTFChars(JNIEnv* env, jstring jstr);
 void ReleaseStandardUTFChars(const char* chars);
 
 jstring GetModifiedUTFString(JNIEnv* env, const char* s);
+
+bool trySetLongField(JNIEnv* env, jobject obj, const char* name, jlong value);
+
+bool trySetBooleanField(JNIEnv* env, jobject obj, const char* name, jboolean value);
+
+bool trySetDoubleField(JNIEnv* env, jobject obj, const char* name, jdouble value);

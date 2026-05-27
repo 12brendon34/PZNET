@@ -95,3 +95,58 @@ JNIEnv* getEnv()
         return env;
     return nullptr;
 }
+
+bool checkAndClearException(JNIEnv* env)
+{
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        return true;
+    }
+    return false;
+}
+
+bool trySetLongField(JNIEnv* env, jobject obj, const char* name, jlong value)
+{
+    jclass cls = env->GetObjectClass(obj);
+    if (cls) {
+        jfieldID fid = env->GetFieldID(cls, name, "J");
+        if (fid) {
+            env->SetLongField(obj, fid, value);
+        }
+    }
+    if (checkAndClearException(env)) {
+        return false;
+    }
+    return true;
+}
+
+bool trySetBooleanField(JNIEnv* env, jobject obj, const char* name, jboolean value)
+{
+    jclass cls = env->GetObjectClass(obj);
+    if (cls) {
+        jfieldID fid = env->GetFieldID(cls, name, "Z");
+        if (fid) {
+            env->SetBooleanField(obj, fid, value);
+        }
+    }
+    if (checkAndClearException(env)) {
+        return false;
+    }
+    return true;
+}
+
+bool trySetDoubleField(JNIEnv* env, jobject obj, const char* name, jdouble value)
+{
+    jclass cls = env->GetObjectClass(obj);
+    if (cls) {
+        jfieldID fid = env->GetFieldID(cls, name, "D");
+        if (fid) {
+            env->SetDoubleField(obj, fid, value);
+        }
+    }
+    if (checkAndClearException(env)) {
+        return false;
+    }
+    return true;
+}

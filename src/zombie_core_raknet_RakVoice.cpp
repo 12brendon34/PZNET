@@ -133,14 +133,32 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetVoiceBan(JNIEnv*, jcl
     ZNetLogPrintf(0, "%s called\n", __func__);
 }
 
-JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetChannelsRouting(JNIEnv*, jclass, jlong, jboolean, jintArray, jshort)
+JNIEXPORT void JNICALL Java_zombie_core_raknet_RakVoice_SetChannelsRouting(JNIEnv* env, jclass, jlong guid, jboolean broadcast, jintArray channels, jshort length)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
+    if (length < 0 || length > 1024) {
+        jclass cls = env->FindClass("java/lang/RuntimeException");
+        env->ThrowNew(cls, "invalid buffer size");
+        return;
+    }
+
+    jint buf[1024];
+    env->GetIntArrayRegion(channels, 0, length, buf);
+
+    rakVoice.SetChannelsRouting(RakNet::RakNetGUID(static_cast<uint64_t>(guid)), broadcast != JNI_FALSE, buf, length);
 }
 
-JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakVoice_GetChannelStatistics(JNIEnv*, jclass, jlong, jlongArray)
+JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakVoice_GetChannelStatistics(JNIEnv* env, jclass, jlong guid, jlongArray out)
 {
-    ZNetLogPrintf(0, "%s called\n", __func__);
-    return false;
+    if (env->GetArrayLength(out) != 2)
+        return JNI_FALSE;
+
+    int64_t stats[2] = {0, 0};
+    const bool ok = rakVoice.GetChannelStatistics(RakNet::RakNetGUID(static_cast<uint64_t>(guid)), stats);
+    if (!ok)
+        return JNI_FALSE;
+
+    env->SetLongArrayRegion(out, 0, 2, reinterpret_cast<const jlong*>(stats));
+    return JNI_TRUE;
 }
+
 } // extern "C"
