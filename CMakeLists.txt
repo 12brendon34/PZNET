@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(JNI REQUIRED)
 
+# RakNet
 set(RAKNET_ROOT "${CMAKE_SOURCE_DIR}/third_party/raknet")
 
 if (WIN32)
@@ -48,6 +49,8 @@ else ()
     message(FATAL_ERROR "Unsupported platform")
 endif ()
 
+# miniupnpc
+add_subdirectory(third_party/miniupnpc EXCLUDE_FROM_ALL)
 
 add_library(pznet SHARED
         src/ZNetLog.cpp
@@ -67,8 +70,13 @@ target_include_directories(pznet PRIVATE
 
 target_link_libraries(pznet PRIVATE
         raknet
+        miniupnpc
         ${JNI_LIBRARIES}
 )
+if (WIN32)
+    target_link_libraries(pznet PRIVATE ws2_32 iphlpapi)
+    target_compile_definitions(pznet PRIVATE MINIUPNP_STATICLIB _WIN32_WINNT=0x0601)
+endif ()
 
 set_target_properties(pznet PROPERTIES
         OUTPUT_NAME "ZNetNoSteam64"

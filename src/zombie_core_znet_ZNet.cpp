@@ -29,6 +29,26 @@ static void JNI_LogPuts(const char* s)
     env->DeleteLocalRef(jline);
 }
 
+#ifdef _DEBUG
+static FILE* g_logFile = nullptr;
+
+static int64_t File_LogPuts(const char* s) {
+    if (!g_logFile) {
+        g_logFile = std::fopen("pznet.log", "a");
+        if (!g_logFile) return 0;
+    }
+    std::fputs(s, g_logFile);
+    std::fputc('\n', g_logFile);
+    std::fflush(g_logFile);
+    return 0;
+}
+
+static void TeeLogPuts(const char* s) {
+    File_LogPuts(s);
+    JNI_LogPuts(s);
+}
+#endif
+
 extern "C" {
     JNIEXPORT void JNICALL Java_zombie_core_znet_ZNet_init(JNIEnv* env, jclass clazz)
     {
@@ -36,10 +56,10 @@ extern "C" {
         g_class = (jclass)env->NewGlobalRef(clazz);
         g_LogPutsMethod = env->GetStaticMethodID(clazz, "logPutsCallback", "(Ljava/lang/String;)V");
         ZNetLogSetPutsFunction(JNI_LogPuts);
-        ZNetLogPrintf(2, "ZNet loaded\n");
 #ifdef _DEBUG
-        ZNetLogSetLevel(-1); // added by me
+        ZNetLogSetPutsFunction(TeeLogPuts);
 #endif
+        ZNetLogPrintf(2, "ZNet loaded\n");
     }
 
     JNIEXPORT void JNICALL Java_zombie_core_znet_ZNet_setLogLevel(JNIEnv*, jclass, jint level)
