@@ -1,8 +1,6 @@
 // src/ZNetLog.h
 #pragma once
-
 #include <cstdarg>
-#include <cstdint>
 
 using ZNetLogPutsFn = void (*)(const char* msg);
 

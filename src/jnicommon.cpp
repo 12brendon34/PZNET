@@ -3,7 +3,6 @@
 //
 #include "jnicommon.h"
 #include <cstring>
-#include <cstdlib>
 
 extern JavaVM* g_jvm;
 

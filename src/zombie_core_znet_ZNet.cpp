@@ -1,12 +1,10 @@
 //
 // Created by Brendon on 5/26/2026.
 //
-#include <jni.h>
-#include <string>
-
 #include "zombie_core_znet_ZNet.h"
 #include "ZNetLog.h"
 #include "jnicommon.h"
+#include <string>
 
 JavaVM* g_jvm = nullptr;
 

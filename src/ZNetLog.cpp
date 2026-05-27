@@ -3,7 +3,6 @@
 //
 // src/ZNetLog.cpp
 #include "ZNetLog.h"
-#include <cstdarg>
 #include <cstdio>
 
 namespace {
