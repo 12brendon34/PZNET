@@ -47,7 +47,7 @@ AlignTrailingComments: false
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 
-SpaceAfterCStyleCast: true
+SpaceAfterCStyleCast: false
 SpaceAfterTemplateKeyword: false
 SpaceBeforeRangeBasedForLoopColon: false
 

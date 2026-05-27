@@ -10,7 +10,7 @@ namespace {
     ZNetLogPutsFn ZNetLogPuts = nullptr;
 
     char buffer[1024];
-}
+} // namespace
 
 void ZNetLogSetPutsFunction(ZNetLogPutsFn fn)
 {

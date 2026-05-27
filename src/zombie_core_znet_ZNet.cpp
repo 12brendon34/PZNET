@@ -2,9 +2,9 @@
 // Created by Brendon on 5/26/2026.
 //
 #include "zombie_core_znet_ZNet.h"
+#include <string>
 #include "ZNetLog.h"
 #include "jnicommon.h"
-#include <string>
 
 JavaVM* g_jvm = nullptr;
 
@@ -30,21 +30,21 @@ static void JNI_LogPuts(const char* s)
 }
 
 extern "C" {
-JNIEXPORT void JNICALL Java_zombie_core_znet_ZNet_init(JNIEnv* env, jclass clazz)
-{
-    env->GetJavaVM(&g_jvm);
-    g_class = (jclass) env->NewGlobalRef(clazz);
-    g_LogPutsMethod = env->GetStaticMethodID(clazz, "logPutsCallback", "(Ljava/lang/String;)V");
-    ZNetLogSetPutsFunction(JNI_LogPuts);
-    ZNetLogPrintf(2, "ZNet loaded\n");
+    JNIEXPORT void JNICALL Java_zombie_core_znet_ZNet_init(JNIEnv* env, jclass clazz)
+    {
+        env->GetJavaVM(&g_jvm);
+        g_class = (jclass)env->NewGlobalRef(clazz);
+        g_LogPutsMethod = env->GetStaticMethodID(clazz, "logPutsCallback", "(Ljava/lang/String;)V");
+        ZNetLogSetPutsFunction(JNI_LogPuts);
+        ZNetLogPrintf(2, "ZNet loaded\n");
 #ifdef _DEBUG
-    ZNetLogSetLevel(-1); //added by me
+        ZNetLogSetLevel(-1); // added by me
 #endif
-}
+    }
 
-JNIEXPORT void JNICALL Java_zombie_core_znet_ZNet_setLogLevel(JNIEnv*, jclass, jint level)
-{
-    ZNetLogSetLevel(level);
-    ZNetLogPrintf(2, "SetLogLevel %d\n");
-}
+    JNIEXPORT void JNICALL Java_zombie_core_znet_ZNet_setLogLevel(JNIEnv*, jclass, jint level)
+    {
+        ZNetLogSetLevel(level);
+        ZNetLogPrintf(2, "SetLogLevel %d\n");
+    }
 } // extern "C"
