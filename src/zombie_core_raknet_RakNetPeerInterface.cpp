@@ -6,12 +6,14 @@
 
 #include <MessageIdentifiers.h>
 #include <RakPeerInterface.h>
-#include <cstdio>
+
 
 #ifdef _WIN32
 #include <ws2tcpip.h>
+#include <cstdio>
 #else
 #include <arpa/inet.h>
+#include <cstring>
 #endif
 
 #include "RakNetStatistics.h"
@@ -89,7 +91,13 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Startup(JNIEn
 
     ZNetLogPrintf(1, "Startup (dual-stack): port=%d v6host='%s' v4host='%s'\n", port, v6display, v4display);
 
+#ifdef _WIN32
+    // Windows needs to bind both
     jint result = g_peer->Startup(maxConnections, descriptors, 2);
+#else
+    // Linux IPv6 dual-stack uses IPv4 also
+    jint result = g_peer->Startup(maxConnections, descriptors, 1);
+#endif
 
     // Fallback IPv4 only
     if (result != RakNet::RAKNET_STARTED && result != RakNet::RAKNET_ALREADY_STARTED) {

@@ -35,6 +35,10 @@ if (WIN32)
     target_compile_definitions(pznet PRIVATE MINIUPNP_STATICLIB _WIN32_WINNT=0x0601)
 endif ()
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(pznet PRIVATE _DEBUG)
+endif()
+
 set_target_properties(pznet PROPERTIES
         OUTPUT_NAME "ZNetNoSteam64"
 )
