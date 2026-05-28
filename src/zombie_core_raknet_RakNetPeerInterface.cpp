@@ -25,6 +25,9 @@ static jmethodID g_bufferLimitMethod = nullptr;
 static RakNet::Packet* g_currentPacket = nullptr;
 static RakNet::Packet g_lastPacket;
 
+static bool g_injectPeerIndex = false;
+static uint8_t g_peerIndex = 0;
+
 static bool g_steamMode = false;
 
 static int clientPort = 0;
@@ -289,8 +292,8 @@ JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakNetPeerInterface_TryReceiv
         case ID_CONNECTION_REQUEST_ACCEPTED:
         case ID_CONNECTION_LOST:
         case ID_DISCONNECTION_NOTIFICATION:
-            g_lastPacket.data[1] = idx;
-            ++g_lastPacket.length;
+            g_injectPeerIndex = true;
+            g_peerIndex = idx;
             break;
         default:
             break;
@@ -301,19 +304,30 @@ JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakNetPeerInterface_TryReceiv
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_nativeGetData(JNIEnv* env, jobject, jobject buffer)
 {
-    void* dst = env->GetDirectBufferAddress(buffer);
+    auto* dst = static_cast<uint8_t*>(env->GetDirectBufferAddress(buffer));
     if (!dst)
         return 0;
 
-    std::memcpy(dst, g_lastPacket.data, g_lastPacket.length);
+    const jlong capacity = env->GetDirectBufferCapacity(buffer);
+    jint length = static_cast<jint>(g_lastPacket.length);
+    if (capacity >= 0 && length > capacity)
+        length = static_cast<jint>(capacity);
+
+    std::memcpy(dst, g_lastPacket.data, length);
+
+    if (g_injectPeerIndex && (capacity < 0 || capacity >= 2)) {
+        dst[1] = g_peerIndex;
+        if (length < 2)
+            length = 2;
+    }
 
     if (!g_bufferLimitMethod) {
         jclass cls = env->FindClass("java/nio/Buffer");
         g_bufferLimitMethod = env->GetMethodID(cls, "limit", "(I)Ljava/nio/Buffer;");
     }
-    env->CallObjectMethod(buffer, g_bufferLimitMethod, g_lastPacket.length);
+    env->CallObjectMethod(buffer, g_bufferLimitMethod, length);
 
-    return static_cast<jint>(g_lastPacket.length);
+    return length;
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_sendNative(JNIEnv* env, jobject, jobject buffer, jint length, jint priority, jint reliability, jbyte orderingChannel, jlong guid, jboolean broadcast)
