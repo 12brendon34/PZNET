@@ -34,8 +34,6 @@ int g_upnpError = 0;
 bool g_igdFound = false;
 std::list<PortMapping> g_mappingList;
 
-constexpr int kUpnpIpv6 = 0;
-
 void upnp_cleanup()
 {
     if (g_devList) {
@@ -62,33 +60,42 @@ extern "C" {
 JNIEXPORT void JNICALL Java_zombie_core_znet_PortMapper__1discover(JNIEnv*, jclass)
 {
     upnp_cleanup();
+    g_devList = upnpDiscover(3000, nullptr, nullptr, 0, 0, 2, &g_upnpError);
 
-    g_devList = upnpDiscover(3000, nullptr, nullptr, 0, kUpnpIpv6, 2, &g_upnpError);
+    //fallback
+    if (!g_devList)
+        g_devList = upnpDiscover(3000, nullptr, nullptr, 0, 1, 2, &g_upnpError);
+
     if (!g_devList) {
         g_upnpError = -1;
-        std::strcpy(g_upnpErrorString, "UPnP discover failed\n");
+        std::strcpy(g_upnpErrorString, "UPnP discover failed");
         return;
     }
 
     g_upnpError = UPNP_GetValidIGD(g_devList, &g_upnpUrls, &g_igdDatas, g_lanAddress, sizeof(g_lanAddress), g_wanAddress, sizeof(g_wanAddress));
 
+    if (g_upnpError == 1) {
+        g_igdFound = true;
+        return;
+    }
+
     switch (g_upnpError) {
         case 0:
             std::strcpy(g_upnpErrorString, "No gateway found");
-            return;
-        case 1:
-            g_igdFound = true;
-            return;
+            break;
         case 2:
             std::strcpy(g_upnpErrorString, "Gateway is not connected");
-            return;
+            break;
         case 3:
-            std::strcpy(g_upnpErrorString,
-                        "An UPnP device has been found but was not recognized as an IGD");
-            return;
+            std::strcpy(g_upnpErrorString, "An UPnP device has been found but was not recognized as an IGD");
+            break;
         default:
             std::strcpy(g_upnpErrorString, "Unrecognized UPnP error");
+            break;
     }
+
+    freeUPNPDevlist(g_devList);
+    g_devList = nullptr;
 }
 
 JNIEXPORT jboolean JNICALL Java_zombie_core_znet_PortMapper__1igd_1found(JNIEnv*, jclass)
@@ -207,7 +214,8 @@ JNIEXPORT void JNICALL Java_zombie_core_znet_PortMapper__1fetch_1mappings(JNIEnv
     char rHost[64] = {};
     char duration[16] = {};
 
-    for (int i = 0; i < 65535; ++i) {
+    constexpr int kMaxPortMappings = 1000;
+    for (int i = 0; i < kMaxPortMappings; ++i) {
         char index[16];
         std::snprintf(index, sizeof(index), "%d", i);
         int err = UPNP_GetGenericPortMappingEntry(g_upnpUrls.controlURL, g_igdDatas.first.servicetype, index, extPort, intClient, intPort, protocol, desc, enabled, rHost, duration);
@@ -226,6 +234,8 @@ JNIEXPORT void JNICALL Java_zombie_core_znet_PortMapper__1fetch_1mappings(JNIEnv
         m.leaseDuration = std::strtol(duration, nullptr, 10);
         g_mappingList.push_back(std::move(m));
     }
+
+    ZNetLogPrintf(3, "fetch_mappings: hit cap %d\n", kMaxPortMappings);
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_znet_PortMapper__1num_1mappings(JNIEnv*, jclass)

@@ -8,6 +8,12 @@
 #include <RakPeerInterface.h>
 #include <cstdio>
 
+#ifdef _WIN32
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 #include "RakNetStatistics.h"
 #include "jnicommon.h"
 
@@ -18,11 +24,12 @@ static RakNet::Packet* g_currentPacket = nullptr;
 static RakNet::Packet g_lastPacket;
 
 static bool g_steamMode = false;
+
 static int clientPort = 0;
 static int serverPort = 0;
 static int serverUDPPort = 0;
-
-static RakNet::SocketDescriptor socketDescriptors;
+static char serverHostV4[64] = {};
+static char serverHostV6[64] = {};
 
 extern "C" {
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Init(JNIEnv* env, jobject, jboolean server)
@@ -39,7 +46,6 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Init(JNIEnv* 
     }
 
     g_steamMode = false;
-    //g_lastPacket = RakNet::Packet{};
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Startup(JNIEnv* env, jobject, jint maxConnections, jstring version, jboolean isServer)
@@ -49,17 +55,49 @@ JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Startup(JNIEn
     const char* versionStr = env->GetStringUTFChars(version, nullptr);
     ZNetLogPrintf(2, "Startup version %s\n", versionStr);
 
+    unsigned short port;
     if (isServer) {
+        port = static_cast<unsigned short>(serverPort);
         ZNetLogPrintf(1, "Startup: serverPort=%d serverUDPPort=%d\n", serverPort, serverUDPPort);
-        socketDescriptors.port = serverPort;
-        socketDescriptors.socketFamily = AF_INET;
     } else {
-        socketDescriptors.port = clientPort;
-        socketDescriptors.socketFamily = AF_INET;
+        port = static_cast<unsigned short>(clientPort);
     }
 
-    const jint result = g_peer->Startup(maxConnections, &socketDescriptors, 1);
-    ZNetLogPrintf(1, "Startup returned %d (port=%d, family=%d)\n", result, socketDescriptors.port, socketDescriptors.socketFamily);
+    RakNet::SocketDescriptor descriptors[2];
+
+    descriptors[0].port = port;
+    descriptors[0].socketFamily = AF_INET6;
+    std::strncpy(descriptors[0].hostAddress, serverHostV6, sizeof(descriptors[0].hostAddress) - 1);
+    descriptors[0].hostAddress[sizeof(descriptors[0].hostAddress) - 1] = '\0';
+
+    descriptors[1].port = port;
+    descriptors[1].socketFamily = AF_INET;
+    std::strncpy(descriptors[1].hostAddress, serverHostV4, sizeof(descriptors[1].hostAddress) - 1);
+    descriptors[1].hostAddress[sizeof(descriptors[1].hostAddress) - 1] = '\0';
+
+    const char* v6display;
+    if (descriptors[0].hostAddress[0])
+        v6display = descriptors[0].hostAddress;
+    else
+        v6display = "::";
+
+    const char* v4display;
+    if (descriptors[1].hostAddress[0])
+        v4display = descriptors[1].hostAddress;
+    else
+        v4display = "0.0.0.0";
+
+    ZNetLogPrintf(1, "Startup (dual-stack): port=%d v6host='%s' v4host='%s'\n", port, v6display, v4display);
+
+    jint result = g_peer->Startup(maxConnections, descriptors, 2);
+
+    // Fallback IPv4 only
+    if (result != RakNet::RAKNET_STARTED && result != RakNet::RAKNET_ALREADY_STARTED) {
+        ZNetLogPrintf(1, "Dual-stack failed (%d), trying IPv4-only\n", result);
+        result = g_peer->Startup(maxConnections, &descriptors[1], 1);
+    }
+
+    ZNetLogPrintf(1, "Startup returned %d\n", result);
     env->ReleaseStringUTFChars(version, versionStr);
     return result;
 }
@@ -79,12 +117,25 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetServerIP(J
     ZNetLogPrintf(0, "%s\n", __func__);
 
     const char* ipStr = env->GetStringUTFChars(ip, nullptr);
+    if (!ipStr) {
+        ZNetLogPrintf(1, "SetServerIP: GetStringUTFChars returned null, ignored\n");
+        return;
+    }
     ZNetLogPrintf(1, "SetServerIP: '%s'\n", ipStr);
 
-    int a, b, c, d;
-    if (std::sscanf(ipStr, "%d.%d.%d.%d", &a, &b, &c, &d) == 4) {
-        std::strncpy(socketDescriptors.hostAddress, ipStr, sizeof(socketDescriptors.hostAddress));
-        socketDescriptors.hostAddress[sizeof(socketDescriptors.hostAddress) - 1] = '\0';
+    in_addr v4{};
+    in6_addr v6{};
+
+    if (inet_pton(AF_INET, ipStr, &v4) == 1) {
+        std::strncpy(serverHostV4, ipStr, sizeof(serverHostV4) - 1);
+        serverHostV4[sizeof(serverHostV4) - 1] = '\0';
+        ZNetLogPrintf(1, "SetServerIP: stored as IPv4\n");
+    } else if (inet_pton(AF_INET6, ipStr, &v6) == 1) {
+        std::strncpy(serverHostV6, ipStr, sizeof(serverHostV6) - 1);
+        serverHostV6[sizeof(serverHostV6) - 1] = '\0';
+        ZNetLogPrintf(1, "SetServerIP: stored as IPv6\n");
+    } else {
+        ZNetLogPrintf(1, "SetServerIP: '%s' is not a valid IPv4 or IPv6 literal, ignored\n", ipStr);
     }
 
     env->ReleaseStringUTFChars(ip, ipStr);
@@ -96,7 +147,6 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetServerPort
     ZNetLogPrintf(1, "SetServerPort: port=%d UDPPort=%d\n", port, udpPort);
     serverPort = port;
     serverUDPPort = udpPort;
-    socketDescriptors.port = port;
 }
 
 JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetClientPort(JNIEnv*, jobject, jint value)
@@ -104,7 +154,6 @@ JNIEXPORT void JNICALL Java_zombie_core_raknet_RakNetPeerInterface_SetClientPort
     ZNetLogPrintf(0, "%s\n", __func__);
     ZNetLogPrintf(1, "SetClientPort: port=%d\n", value);
     clientPort = value;
-    socketDescriptors.port = value;
 }
 
 JNIEXPORT jint JNICALL Java_zombie_core_raknet_RakNetPeerInterface_Connect(JNIEnv* env, jobject, jstring host, jint port, jstring password, jboolean /*useSteam*/)

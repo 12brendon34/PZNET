@@ -173,7 +173,7 @@ JNIEXPORT jboolean JNICALL Java_zombie_core_raknet_RakVoice_GetChannelStatistics
     if (!ok)
         return JNI_FALSE;
 
-    env->SetLongArrayRegion(out, 0, 2, reinterpret_cast<const jlong*>(stats));
+    env->SetLongArrayRegion(out, 0, 2, stats);
     return JNI_TRUE;
 }
 
