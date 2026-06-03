@@ -24,8 +24,8 @@ void ZNetLogSetLevel(int level)
 
 void ZNetLogPrintfVA(int level, const char* fmt, va_list va)
 {
-    //this ifdef kinda defeats the purpose of the loglevel
-    //but it's a bit of a pain
+    // this ifdef kinda defeats the purpose of the loglevel
+    // but it's a bit of a pain
 #ifndef _DEBUG
     if (g_logLevel > level)
         return;
