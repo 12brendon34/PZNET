@@ -50,8 +50,7 @@ static void File_LogPuts(const char* s)
 
 static void TeeLogPuts(const char* s)
 {
-    printf("%s", s);
-    std::cout << s << std::endl;
+    //printf("%s", s); I sometimes use this lol
     File_LogPuts(s);
     JNI_LogPuts(s);
 }
