@@ -19,13 +19,11 @@ jobs:
             c_compiler: gcc
             cpp_compiler: g++
             artifact_name: ZNetNoSteam64-linux-x86_64
-            artifact_path: build/libZNetNoSteam64.so
           - name: Windows x86_64 (MSVC)
             os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
             artifact_name: ZNetNoSteam64-windows-x86_64
-            artifact_path: build/Release/ZNetNoSteam64.dll
 
     steps:
     - name: Checkout
@@ -49,9 +47,25 @@ jobs:
     - name: Build
       run: cmake --build build --config Release --parallel
 
-    - name: Upload library
+    - name: Stage artifacts (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        mkdir dist
+        cp build/libZNetNoSteam64.so dist/
+        cp build/third_party/raknet/libRakNet64.so dist/
+
+    - name: Stage artifacts (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        New-Item -ItemType Directory -Path dist | Out-Null
+        Copy-Item build/Release/ZNetNoSteam64.dll dist/
+        Copy-Item build/third_party/raknet/Release/RakNet64.dll dist/
+
+    - name: Upload libraries
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact_name }}
-        path: ${{ matrix.artifact_path }}
+        path: dist/
         if-no-files-found: error
